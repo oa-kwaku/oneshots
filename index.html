@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Race Effort HR Ranges</title>
+<style>
+:root{--bg:#fafafa;--fg:#1a1a1a;--card:#fff;--mut:#666;--line:#e3e3e3;--acc:#fc4c02}
+@media(prefers-color-scheme:dark){:root{--bg:#121212;--fg:#eee;--card:#1c1c1c;--mut:#999;--line:#333}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 8px}
+p.sub,.note{color:var(--mut);font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+label{display:block;font-weight:600;margin-bottom:4px}
+input{font:inherit;padding:8px 10px;width:140px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.row{display:flex;gap:16px;flex-wrap:wrap}
+.races{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.race{border-left:4px solid var(--acc)}
+.race h3{margin:0;font-size:1rem}.race .bpm{font-size:1.6rem;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+.bar{height:8px;border-radius:4px;background:var(--acc)}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<main>
+<h1>Race Effort HR Ranges</h1>
+<p class="sub">Enter your lactate threshold heart rate (LTHR) to get marathon, half marathon and 5K targets.</p>
+
+<div class="card">
+<div class="row">
+<div><label for="lthr">Threshold HR (bpm)</label><input id="lthr" type="number" min="100" max="220" inputmode="numeric" placeholder="e.g. 170"></div>
+<div><label for="max">Max HR (optional)</label><input id="max" type="number" min="120" max="230" inputmode="numeric" placeholder="e.g. 190"></div>
+</div>
+<p class="note">Find LTHR in Strava: Settings → My Performance → Heart Rate Zones, or take the average HR of the last 20 min of a 30-min all-out solo run (Friel test).</p>
+</div>
+
+<div id="out" hidden>
+<h2>Race effort targets</h2>
+<div class="races" id="races"></div>
+<p class="note">Targets are typical ranges for a trained runner, as a percentage of LTHR. Start at the low end and let HR drift up late in the race. In the marathon, HR above the range before halfway is the main warning sign.</p>
+
+<h2>Training zones (Friel, running)</h2>
+<div class="card"><table id="zones"></table></div>
+</div>
+</main>
+<script>
+const RACES=[
+ {n:"Marathon",lo:.84,hi:.90,d:"Steady and controlled"},
+ {n:"Half marathon",lo:.92,hi:.97,d:"Comfortably hard"},
+ {n:"5K",lo:.98,hi:1.03,d:"Hard; climbs through the race"}];
+const ZONES=[
+ ["Z1 Recovery",0,.85],["Z2 Aerobic",.85,.89],["Z3 Tempo",.90,.94],
+ ["Z4 Threshold",.95,.99],["Z5a Super-threshold",1.00,1.02],
+ ["Z5b Aerobic capacity",1.03,1.06],["Z5c Anaerobic",1.07,null]];
+const $=id=>document.getElementById(id);
+function save(){try{localStorage.setItem("hr",JSON.stringify({l:$("lthr").value,m:$("max").value}))}catch(e){}}
+function render(){
+ const l=+$("lthr").value,m=+$("max").value;
+ $("out").hidden=!(l>=100);
+ if(!(l>=100))return;
+ const cap=v=>m?Math.min(v,m):v;
+ $("races").innerHTML=RACES.map(r=>`<div class="card race"><h3>${r.n}</h3>
+  <div class="bpm">${Math.round(l*r.lo)}–${cap(Math.round(l*r.hi))} bpm</div>
+  <div class="note">${Math.round(r.lo*100)}–${Math.round(r.hi*100)}% LTHR · ${r.d}</div></div>`).join("");
+ $("zones").innerHTML="<tr><th>Zone</th><th>BPM</th><th>% LTHR</th></tr>"+ZONES.map(z=>{
+  const lo=z[1]?Math.round(l*z[1]):null,hi=z[2]?Math.round(l*z[2]):null;
+  const bpm=lo===null?`< ${hi}`:hi===null?`${lo}+`:`${lo}–${hi}`;
+  const pct=z[1]===0?`< ${z[2]*100}%`:z[2]===null?`${Math.round(z[1]*100)}%+`:`${Math.round(z[1]*100)}–${Math.round(z[2]*100)}%`;
+  return `<tr><td>${z[0]}</td><td>${bpm}</td><td>${pct}</td></tr>`}).join("");
+}
+try{const s=JSON.parse(localStorage.getItem("hr")||"{}");$("lthr").value=s.l||"";$("max").value=s.m||""}catch(e){}
+["lthr","max"].forEach(i=>$(i).addEventListener("input",()=>{save();render()}));
+render();
+</script>
+</body>
+</html>
