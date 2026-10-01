@@ -23,12 +23,21 @@ table{width:100%;border-collapse:collapse;font-size:.95rem}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
 .bar{height:8px;border-radius:4px;background:var(--acc)}
 a{color:var(--acc)}
+button{font:inherit;font-weight:600;padding:8px 14px;border:0;border-radius:6px;background:var(--acc);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
 </style>
 </head>
 <body>
 <main>
 <h1>Race Effort HR Ranges</h1>
 <p class="sub">Enter your lactate threshold heart rate (LTHR) to get marathon, half marathon and 5K targets.</p>
+
+<div class="card" id="strava" style="margin-bottom:16px">
+<div class="row" style="align-items:center">
+<button id="connect" type="button">Connect Strava</button>
+<span id="status" class="note" style="margin:0">Estimate threshold HR from your recent runs.</span>
+</div>
+</div>
 
 <div class="card">
 <div class="row">
@@ -75,6 +84,89 @@ function render(){
 try{const s=JSON.parse(localStorage.getItem("hr")||"{}");$("lthr").value=s.l||"";$("max").value=s.m||""}catch(e){}
 ["lthr","max"].forEach(i=>$(i).addEventListener("input",()=>{save();render()}));
 render();
+
+// ---- Strava ----
+const CONFIG={CLIENT_ID:"REPLACE_WITH_CLIENT_ID",WORKER_URL:"REPLACE_WITH_WORKER_URL"};
+const SCOPE="read,activity:read_all";
+const redirect=location.origin+location.pathname;
+const setStatus=t=>$("status").textContent=t;
+const tokKey="strava_tok";
+const getTok=()=>{try{return JSON.parse(localStorage.getItem(tokKey))}catch(e){return null}};
+const putTok=t=>{try{localStorage.setItem(tokKey,JSON.stringify(t))}catch(e){}};
+async function worker(path,opt){
+ const r=await fetch(CONFIG.WORKER_URL+path,opt);
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(d.message||d.error||("HTTP "+r.status));
+ return d;
+}
+async function exchange(body){
+ const t=await worker("/token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+ putTok(t);return t;
+}
+async function token(){
+ let t=getTok();
+ if(!t)throw new Error("not connected");
+ if(t.expires_at<Date.now()/1000+60)t=await exchange({refresh_token:t.refresh_token});
+ return t.access_token;
+}
+async function api(path){
+ return worker("/api/"+path,{headers:{Authorization:"Bearer "+await token()}});
+}
+// Highest average of any window of `n` consecutive 1-second samples.
+function bestWindow(hr,n){
+ if(hr.length<n)return null;
+ let sum=0,best=0;
+ for(let i=0;i<hr.length;i++){
+  sum+=hr[i];
+  if(i>=n)sum-=hr[i-n];
+  if(i>=n-1)best=Math.max(best,sum/n);
+ }
+ return best;
+}
+async function estimate(){
+ setStatus("Loading recent runs…");
+ const after=Math.floor(Date.now()/1000)-30*86400;
+ const acts=await api("athlete/activities?per_page=100&after="+after);
+ const runs=acts.filter(a=>/Run/.test(a.sport_type||a.type)&&a.has_heartrate&&a.moving_time>=25*60);
+ if(!runs.length)throw new Error("No runs with heart rate data (25+ min) in the last 30 days.");
+ const maxHr=Math.max(...acts.filter(a=>a.max_heartrate).map(a=>a.max_heartrate));
+ const top=runs.sort((a,b)=>b.average_heartrate-a.average_heartrate).slice(0,6);
+ let best=0;
+ for(let i=0;i<top.length;i++){
+  setStatus(`Analysing run ${i+1} of ${top.length}…`);
+  const s=await api(`activities/${top[i].id}/streams?keys=heartrate&key_by_type=true`);
+  const w=bestWindow(s.heartrate?s.heartrate.data:[],20*60);
+  if(w&&w>best)best=w;
+ }
+ if(!best)throw new Error("Couldn't read heart rate streams.");
+ // Best 20-min HR x 0.95 is the Friel field-test estimate; hard training runs underestimate, so treat as a floor.
+ $("lthr").value=Math.round(best*.95);
+ $("max").value=Math.round(maxHr);
+ save();render();
+ setStatus(`Estimated from your best 20 min HR (${Math.round(best)} bpm) across ${runs.length} runs. Edit if you know better.`);
+}
+async function strava(){
+ const p=new URLSearchParams(location.search);
+ if(p.get("code")){
+  history.replaceState(null,"",location.pathname);
+  if(!p.get("scope")||!p.get("scope").includes("activity:read_all")){setStatus("Strava access was not granted for activities.");return}
+  try{setStatus("Connecting…");await exchange({code:p.get("code")});await estimate();$("connect").textContent="Re-sync Strava"}
+  catch(e){setStatus("Strava error: "+e.message)}
+ }else if(getTok()){
+  $("connect").textContent="Re-sync Strava";
+ }
+}
+$("connect").addEventListener("click",async()=>{
+ if(CONFIG.CLIENT_ID.startsWith("REPLACE")||CONFIG.WORKER_URL.startsWith("REPLACE")){setStatus("Strava isn't configured yet (see README).");return}
+ if(getTok()){
+  $("connect").disabled=true;
+  try{await estimate()}catch(e){setStatus("Strava error: "+e.message)}
+  $("connect").disabled=false;
+  return;
+ }
+ location.href="https://www.strava.com/oauth/authorize?"+new URLSearchParams({client_id:CONFIG.CLIENT_ID,redirect_uri:redirect,response_type:"code",approval_prompt:"auto",scope:SCOPE});
+});
+strava();
 </script>
 </body>
 </html>
