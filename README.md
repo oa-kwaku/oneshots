@@ -20,4 +20,4 @@ Strava's OAuth needs a client secret, so a tiny Cloudflare Worker (`worker/`) ho
 3. In `index.html`, set `CONFIG.CLIENT_ID` and `CONFIG.WORKER_URL` (the `*.workers.dev` URL from step 2).
 4. Push to `main`. Open the site and click **Connect Strava**.
 
-The app reads your last 90 days of runs (25+ min, with HR), finds your best 20-minute average HR in the 6 highest-HR runs, and multiplies by 0.95 (Friel field-test estimate). Hard training runs under-read a true all-out test, so treat it as a floor and edit the number if you know better. Tokens are stored in your browser's localStorage only.
+The app reads your last 30 days of runs (25+ min, with HR), finds your best 20-minute average HR in the 6 highest-HR runs, and multiplies by 0.95 (Friel field-test estimate). Hard training runs under-read a true all-out test, so treat it as a floor and edit the number if you know better. Tokens are stored in your browser's localStorage only.

@@ -125,10 +125,10 @@ function bestWindow(hr,n){
 }
 async function estimate(){
  setStatus("Loading recent runs…");
- const after=Math.floor(Date.now()/1000)-90*86400;
+ const after=Math.floor(Date.now()/1000)-30*86400;
  const acts=await api("athlete/activities?per_page=100&after="+after);
  const runs=acts.filter(a=>/Run/.test(a.sport_type||a.type)&&a.has_heartrate&&a.moving_time>=25*60);
- if(!runs.length)throw new Error("No runs with heart rate data (25+ min) in the last 90 days.");
+ if(!runs.length)throw new Error("No runs with heart rate data (25+ min) in the last 30 days.");
  const maxHr=Math.max(...acts.filter(a=>a.max_heartrate).map(a=>a.max_heartrate));
  const top=runs.sort((a,b)=>b.average_heartrate-a.average_heartrate).slice(0,6);
  let best=0;
